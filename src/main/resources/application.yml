@@ -1,7 +1,3 @@
-# 系統 Log 設定檔
-logging:
-  config: classpath:log4j2.xml
-  
 server:
   port: 9080
 
