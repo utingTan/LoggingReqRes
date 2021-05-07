@@ -27,7 +27,7 @@ public class LoggerInterceptor implements HandlerInterceptor {
 	// Lo4j
 	private static Logger LOG = LogManager.getLogger(LoggerInterceptor.class);
 	
-	private static final long MB = 1024 * 1024L;
+//	private static final long MB = 1024 * 1024L;
 	
 	/**
 	 * Executed before actual handler is executed - 請求提交前處理
@@ -41,9 +41,9 @@ public class LoggerInterceptor implements HandlerInterceptor {
 	public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler)
 			throws APIException {
     	Runtime rt = Runtime.getRuntime();
-    	long totalMemoryMb = rt.totalMemory() / MB;
-    	long freeMemoryMb = rt.freeMemory() / MB;
-    	long maxMemoryMb = rt.maxMemory() / MB;
+    	long totalMemoryMb = rt.totalMemory();
+    	long freeMemoryMb = rt.freeMemory();
+    	long maxMemoryMb = rt.maxMemory();
     	
 		LOG.debug("[API Request Begin] preHandle() - SessionId[{}], URL[{}], usageMemory[{}], totalMemory[{}], freeMemory[{}], maxMemory[{}] <<======"
 				, request.getSession().getId()
@@ -64,9 +64,9 @@ public class LoggerInterceptor implements HandlerInterceptor {
     @Override
     public void postHandle(final HttpServletRequest request, final HttpServletResponse response, final Object handler, final ModelAndView modelAndView) {
     	Runtime rt = Runtime.getRuntime();
-    	long totalMemoryMb = rt.totalMemory() / MB;
-    	long freeMemoryMb = rt.freeMemory() / MB;
-    	long maxMemoryMb = rt.maxMemory() / MB;
+    	long totalMemoryMb = rt.totalMemory();
+    	long freeMemoryMb = rt.freeMemory();
+    	long maxMemoryMb = rt.maxMemory();
     	
     	LOG.debug("[API Request End] postHandle() - SessionId[{}], URL[{}], usageMemory[{}], totalMemory[{}], freeMemory[{}], maxMemory[{}] <<======"
 				, request.getSession().getId()
