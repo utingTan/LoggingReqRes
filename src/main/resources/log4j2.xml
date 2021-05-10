@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration>
+  <Appenders>
+    <RollingFile name="RollingFile_Appender" fileName="/otp/log/TCB.OTP.GATEWAY.NEW/OTP.GATEWAY.log" filePattern="/otp/log/TCB.OTP.GATEWAY.NEW/archive/OTP.GATEWAY.%d{yyyy-MM-dd}.log.gz">
+      <PatternLayout>
+        <Pattern>[%-5level] %d{yyyy-MM-dd HH:mm:ss.SSS} %r [%t] %x %-5p %C %l: %m%n</Pattern>
+      </PatternLayout>
+      <Policies>
+		<TimeBasedTriggeringPolicy interval="1" modulate="true"/>
+      </Policies>
+    </RollingFile>
+  </Appenders>
+  <Loggers>
+    <Logger name="com.tcb.otp.gw" level="debug">
+      <AppenderRef ref="RollingFile_Appender"/>
+    </Logger>
+  </Loggers>
+</Configuration>
