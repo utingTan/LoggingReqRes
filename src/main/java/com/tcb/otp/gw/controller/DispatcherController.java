@@ -79,25 +79,87 @@ public class DispatcherController {
 	}
 	
 	@PostMapping(value = { "/rest/Otp*", "/rest/Device*", "/rest/SendOtp*" })
-	@ResponseBody
 	public ResponseEntity<String> process(HttpServletRequest request, HttpEntity<String> entity)
 			throws DBException {
-		return ResponseEntity.status(HttpStatus.OK).body("ok");
+
+		String url = getServiceUrl(request);
+		if (url.equalsIgnoreCase(DISPATCHER_ERROR_NULL_URL)) 
+			return ResponseEntity.ok().body(genResponeData(DISPATCHER_ERROR_NULL_URL));
+		else if (url.equalsIgnoreCase(DISPATCHER_ERROR_NOSERVICE)) 
+			return ResponseEntity.ok().body(genResponeData(DISPATCHER_ERROR_NOSERVICE));
+		if (entity != null && entity.getBody() != null)
+			LOG.info("\n"+url+"\n"+entity.getBody().toString()+"\n");
+		ResponseEntity<String> rslt = template.exchange(url, HttpMethod.POST, entity, String.class);
+		return ResponseEntity.ok(rslt.getBody());
 	}
 
 	@PostMapping(value = { "/SendOTPServlet" })
-	@ResponseBody
 	public ResponseEntity<String> processServlet(final HttpServletRequest request, HttpEntity<String> entity)
 			throws DBException {
-		return ResponseEntity.status(HttpStatus.OK).body("ok");
+
+		String url = getServiceUrl(request);
+		if (url.equalsIgnoreCase(DISPATCHER_ERROR_NULL_URL)) 
+			return ResponseEntity.ok().body(genResponeData(DISPATCHER_ERROR_NULL_URL));
+		else if (url.equalsIgnoreCase(DISPATCHER_ERROR_NOSERVICE)) 
+			return ResponseEntity.ok().body(genResponeData(DISPATCHER_ERROR_NOSERVICE));
+		HttpHeaders headers = new HttpHeaders();
+		// 請勿輕易改變此提交方式，大部分的情況下，提交方式都是表單提交
+		headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
+		MultiValueMap<String, String> params= new LinkedMultiValueMap<String, String>();
+		params.add("MOBILE_PHONE", request.getParameter("MOBILE_PHONE")); // 用戶手機號碼 
+		params.add("SMS_CONTENT", request.getParameter("SMS_CONTENT")); // 簡訊內容
+		params.add("BIZACCNO", request.getParameter("BIZACCNO")); // 業務別代號
+		try {
+			LOG.info("\n"+url+"\n"+"mobilePhone=["+request.getParameter("MOBILE_PHONE")+"], smsContent=["+request.getParameter("SMS_CONTENT")+"]["+URLDecoder.decode(request.getParameter("SMS_CONTENT"),"utf-8")+"], bizAccno=["+request.getParameter("BIZACCNO")+"]");
+		} catch (UnsupportedEncodingException e) {
+			LOG.info("\n"+url+"\n"+"mobilePhone=["+request.getParameter("MOBILE_PHONE")+"], smsContent=["+request.getParameter("SMS_CONTENT")+"], bizAccno=["+request.getParameter("BIZACCNO")+"]");
+		}
+		
+		HttpEntity<MultiValueMap<String, String>> requestEntity = new HttpEntity<MultiValueMap<String, String>>(params, headers);
+		ResponseEntity<String> rslt = template.exchange(url.toString(), HttpMethod.POST, requestEntity, String.class);
+		return new ResponseEntity<>(rslt.getBody(), rslt.getHeaders(), HttpStatus.OK);
 	}
 	
 	private GwUrlMapping findGateWayUrl(String apiId) throws DBException {
-		return null;
+		return mappingRepository.findByKey(GwUrlMapping.class, apiId);
 	}
 	
 	private String getServiceUrl(HttpServletRequest request) throws DBException {
-		return null;
+		try {
+			String path = request.getRequestURL().toString();
+			LOG.debug("getServiceUrl() begin - path=[{}]", path);
+			String host = path.replace(request.getRequestURI(), "");
+			String apiId = path.substring(path.lastIndexOf('/') + 1);
+			GwUrlMapping mapping = findGateWayUrl(apiId);
+			
+			if ( null == mapping) {
+				return DISPATCHER_ERROR_NULL_URL;
+				
+			} else {
+
+//				ServiceInstance serviceInstance = lbClient.choose(TCB_OTP_SERVICE);
+//				
+//				if ( null == serviceInstance) {
+//					serviceInstance = lbClient.choose(TCB_OTP_SERVICE);
+//					
+//					if ( null == serviceInstance)
+//						return DISPATCHER_ERROR_NOSERVICE;
+//				}
+				
+				String gwUrl = mapping.getUrl();
+				LOG.debug("getServiceUrl() dbUrl=[{}]", gwUrl);
+				
+				String rtnUrl = String.format("%s%s"
+						, host.replace("9080", "9085")
+						, gwUrl.replace("otp-service", TCB_OTP_SERVICE));
+				LOG.debug("getServiceUrl() end - rtnUrl=[{}]", rtnUrl);
+				return rtnUrl;
+			}
+			
+		} catch (Exception e) {
+			LOG.info(e.toString());
+			return DISPATCHER_ERROR_NOSERVICE;
+		}
 	}
 	
 	/**
@@ -109,10 +171,62 @@ public class DispatcherController {
 	 */
 	@SuppressWarnings({ "unchecked", "rawtypes" })
 	protected OtpApiRequest<BaseReqBody> initAPIRequestInstance(String content) throws APIException {
-		return null;
+
+		ObjectMapper mapper = new ObjectMapper();
+
+		OtpApiRequest<BaseReqBody> request = null;
+
+		Map<String, String> rslMap = null;
+		OtpHeader reqHeader = null; //
+		BaseReqBody reqBody = null;
+
+		try {
+			rslMap = mapper.readValue(content, Map.class);
+			// 取得 API Request Header
+			if (rslMap.get("reqHeader") != null)
+				reqHeader = mapper.convertValue(rslMap.get("reqHeader"), OtpHeader.class);
+			// 取得 API Request Body
+			if (rslMap.get("reqBody") != null)
+				reqBody = mapper.convertValue(rslMap.get("reqBody"), BaseReqBody.class);
+			request = new OtpApiRequest(reqHeader, reqBody);
+		} catch (Exception e) {
+			LOG.error("Initialization API Request Instance Error", e);
+			throw new APIException("unknow yat..."); // TODO defined new msgCode for the error 2020.08.10
+		}
+
+		return request;
 	}
 
 	private String genResponeData(String rtnMsg) {
-		return null;
+		LOG.debug("genResponeData() begin - rtnMsg=[{}]", rtnMsg);
+		String xml = null;
+		OtpApiResponse<BaseResBody> response = new OtpApiResponse<BaseResBody>();
+		OtpHeader resHeader = new OtpHeader();
+
+		// API Request 交易時間
+		resHeader.setTxSn(DateUtils.getcurrentTimeStrByDateFormat(DateUtils.FORMAT_DATETIME_WITH_SLASH));
+		resHeader.setReturnCode(UNKNOWN_RUNTIME_EXCEPTION);
+		resHeader.setReturnMsg(rtnMsg);
+		// 回應說明 依據 MsgCode 取得對應 i18n 訊息, 無法對應則顯示原訊息代碼
+		// i18nMsgHelper.message("dispatcher.error.null.url");
+		response.setResponseHeader(resHeader);
+		
+		try {
+			String objectResponseXml = new XmlMapper().writeValueAsString(response);
+			String replaceEmptyNameSpace = null;
+			
+			if ( StringUtils.isNotBlank(objectResponseXml)) {
+				replaceEmptyNameSpace = objectResponseXml.replaceAll(XML_EMPTY_NAMESPACE, "");
+				
+			} else {
+				replaceEmptyNameSpace = "";
+			}
+			xml = String.format("%s%s", XML_VERSION, replaceEmptyNameSpace);
+			LOG.debug("genResponeData() end - xml=[{}]", xml);
+			
+		} catch (JsonProcessingException e) {
+			LOG.error("genResponeData() fail - rtnMsg=[{}], e=", rtnMsg, e);
+		}
+		return xml;
 	}
 }
